@@ -16,8 +16,8 @@ const int LEFT_DRIVE_1_CHANNEL = 2;
 const int RIGHT_DRIVE_0_CHANNEL = 3;
 const int RIGHT_DRIVE_1_CHANNEL = 4;
 
-const int LEFT_SHIFTER_CHANNEL = ;
-const int RIGHT_SHIFTER_CHANNEL = ;
+const int LEFT_SHIFTER_CHANNEL = 7; //edit these soon
+//const int RIGHT_SHIFTER_CHANNEL = ; 
 
 const int TOP_LAUNCHER_CHANNEL = 7;
 const int BOTTOM_LAUNCHER_CHANNEL = 8;
@@ -30,7 +30,7 @@ const int LAUNCH_ENCODER_TOP_CHANNEL_A = 7;
 const int LAUNCH_ENCODER_TOP_CHANNEL_B = 5;
 const int LAUNCH_ENCODER_BOTTOM_CHANNEL = 8;
 
-Joystick Button Constants
+//Joystick Button Constants
 const int TURNING_BUTTON = 2;
 
 //Other Constants
@@ -70,7 +70,7 @@ public:
 		rightDrive0 = new Victor(DIGITAL_SIDECAR_PORT,RIGHT_DRIVE_0_CHANNEL);
 		rightDrive1 = new Victor(DIGITAL_SIDECAR_PORT,RIGHT_DRIVE_1_CHANNEL);
 		leftShifter = new Servo(DIGITAL_SIDECAR_PORT,LEFT_SHIFTER_CHANNEL);
-		rightShifter = new Servo(DIGITAL_SIDECAR_PORT,LEFT_SHIFTER_CHANNEL);
+		//rightShifter = new Servo(DIGITAL_SIDECAR_PORT,LEFT_SHIFTER_CHANNEL);
 		topLauncher = new Jaguar(DIGITAL_SIDECAR_PORT,TOP_LAUNCHER_CHANNEL);
 		bottomLauncher = new Jaguar(DIGITAL_SIDECAR_PORT,BOTTOM_LAUNCHER_CHANNEL);
 		conveyor0 = new Victor(DIGITAL_SIDECAR_PORT,CONVEYOR_0_CHANNEL);
@@ -121,12 +121,12 @@ public:
 		if (((SHIFT_SERVO_MIN + SHIFT_SERVO_ERROR) > leftShifter->Get() > (SHIFT_SERVO_MIN - SHIFT_SERVO_ERROR)) && ((SHIFT_SERVO_MIN + SHIFT_SERVO_ERROR) > rightShifter->Get() > (SHIFT_SERVO_MIN - SHIFT_SERVO_ERROR))) {
 			// are the two servos between the error threshold of where they would be if they were in MIN state? if so, set to MAX state.
 			leftShifter->Set(SHIFT_SERVO_MAX);
-			rightShifter->Set(SHIFT_SERVO_MAX);
+			//rightShifter->Set(SHIFT_SERVO_MAX);
 		}
-		if (((SHIFT_SERVO_MAX + SHIFT_SERVO_ERROR) > leftShifter->Get() > (SHIFT_SERVO_MAX - SHIFT_SERVO_ERROR)) && ((SHIFT_SERVO_MAX + SHIFT_SERVO_ERROR) > rightShifter->Get() > (SHIFT_SERVO_MAX - SHIFT_SERVO_ERROR))) {
+		else if (((SHIFT_SERVO_MAX + SHIFT_SERVO_ERROR) > leftShifter->Get() > (SHIFT_SERVO_MAX - SHIFT_SERVO_ERROR)) && ((SHIFT_SERVO_MAX + SHIFT_SERVO_ERROR) > rightShifter->Get() > (SHIFT_SERVO_MAX - SHIFT_SERVO_ERROR))) {
 			// are the two servos between the error threshold of where they would be if they were in MAX state? if so, set to MIN state.
 			leftShifter->Set(SHIFT_SERVO_MIN);
-			rightShifter->Set(SHIFT_SERVO_MIN);
+			//rightShifter->Set(SHIFT_SERVO_MIN);
 		}
 	}
 
