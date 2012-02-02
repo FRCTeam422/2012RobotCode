@@ -32,6 +32,7 @@ const int LAUNCH_ENCODER_BOTTOM_CHANNEL = 8;
 
 //Other Constants
 const int MAX_MOTOR_RPM = 200; //TODO: Get actual value for the maximum RPM
+const int TURNING_BUTTON = 2; which joystick button toggles turning mode
 
 const float SHIFT_SERVO_MIN = 0.0;
 const float SHIFT_SERVO_MAX = 1.0;
@@ -91,13 +92,21 @@ public:
 
 	//Update the drive motor speeds on the robot from stick0 and stick1 positions
 	void Drive(void) {
-		float left = stick0->GetY();
-		float right = stick1->GetY();
-		leftDrive0->Set(left);
-		leftDrive1->Set(left);
-		rightDrive0->Set(right);
-		rightDrive1->Set(right);
-
+		float left = stick0-GetY();
+		float right = stick1-GetY();
+		float turning = stick1-GetX();
+		if (stick0-GetRawButton(TURNING_BUTTON)) { //if you hold this button, the robot will only rotate, with stick1x
+			leftDrive0-Set(turning);
+			leftDrive1-Set(turning);
+			rightDrive0-Set(-turning);
+			rightDrive1-Set(-turning);
+		}
+		else {
+			leftDrive0-Set(left);
+			leftDrive1-Set(left);
+			rightDrive0-Set(right);
+			rightDrive1-Set(right);
+		}
 	}
 
 	//Sets the gear shifting servos to the values that they currently aren't
