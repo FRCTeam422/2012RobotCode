@@ -22,8 +22,11 @@ const int LEFT_SHIFTER_CHANNEL = 8; //edit these soon
 const int TOP_LAUNCHER_CHANNEL = 10;	// TODO: change this back to 7
 const int BOTTOM_LAUNCHER_CHANNEL = 11;	// TODO: change this back to 8
 
-const int CONVEYOR_0_CHANNEL = 6;
-const int CONVEYOR_1_CHANNEL = 9;
+const int CONVEYOR_CHANNEL = 6;
+
+//Analog Channels
+const int BALL1_SENSOR_PORT = 5;
+const int BALL3_SENSOR_PORT = 7;
 
 //Digital Channels
 const int LAUNCH_ENCODER_TOP_CHANNEL_A = 7;
@@ -36,6 +39,10 @@ const int TURNING_BUTTON = 2;
 //Other Constants
 const int MAX_MOTOR_RPM = 200; //TODO: Get actual value for the maximum RPM
 const double PULSES_PER_REVOLUTION = 250.0; //pulses for revolution on the endoders
+
+const float BALL_SENSOR_THRESHOLD = 1.2;
+const int TRIGGER_ITTERATIONS = ; //TODO: Put the number of times the ball acquisition code will be run befoure a ball passes the sensor here
+
 
 const float SHIFT_SERVO_MIN = 0.0;
 const float SHIFT_SERVO_MAX = 0.75;
@@ -51,8 +58,7 @@ class MainRobot : public IterativeRobot {
 	Servo *rightShifter;
 	Jaguar *topLauncher;
 	Jaguar *bottomLauncher;
-	Victor *conveyor0;
-	Victor *conveyor1;
+	Victor *conveyor;
 	
 	Jaguar *shiftTestingMotor;
 	
@@ -65,8 +71,14 @@ class MainRobot : public IterativeRobot {
 	DriverStationLCD *dashboardLCD;
 	Dashboard *dashboard;
 	AnalogChannel *ultrasonic;
+	AnalogChannel *ball1;
+	AnalogChannel *ball3;
 	int test;
 	DigitalInput *switch0;
+	//global variables used to keep track of the number of balls
+	int ballsNumber;
+	int Counter;
+	bool hadBall;
 public:
 	MainRobot(void) {
 		leftDrive0 = new Victor(DIGITAL_SIDECAR_PORT,LEFT_DRIVE_0_CHANNEL);
@@ -80,8 +92,7 @@ public:
 		
 		topLauncher = new Jaguar(DIGITAL_SIDECAR_PORT,TOP_LAUNCHER_CHANNEL);
 		bottomLauncher = new Jaguar(DIGITAL_SIDECAR_PORT,BOTTOM_LAUNCHER_CHANNEL);
-		conveyor0 = new Victor(DIGITAL_SIDECAR_PORT,CONVEYOR_0_CHANNEL);
-		conveyor1 = new Victor(DIGITAL_SIDECAR_PORT,CONVEYOR_1_CHANNEL);
+		conveyor = new Victor(DIGITAL_SIDECAR_PORT,CONVEYOR_CHANNEL);
 		launchEncoderTop = new Encoder(LAUNCH_ENCODER_TOP_CHANNEL_A, LAUNCH_ENCODER_TOP_CHANNEL_B, false, Encoder::k1X);
 		//launchEncoderBottom = new Encoder(LAUNCH_ENCODER_BOTTOM_CHANNEL);
 		stick0 = new Joystick(JOYSTICK_0_PORT);
@@ -92,8 +103,13 @@ public:
 		//shooterControl = new PIDController(1.0f,0.000f,0.0f,launchEncoderTop,topLauncher);
 		SetPeriod( 0.0 );
 		launchEncoderTop->SetDistancePerPulse(1.0/PULSES_PER_REVOLUTION);
+		ball1 = new AnalogChannel(BALL1_SENSOR_PORT);
+		ball3 = new AnalogChannel(BALL3_SENSOR_PORT);
 		test = 0;
 		switch0 = new DigitalInput(1);
+		ballsNumber = 0;
+		Counter = 0;
+		hadBall = false;
 	}
 
 
@@ -155,6 +171,52 @@ public:
 			topLauncher->Set(0.0);
 		}
 	}
+	//This counts balls, and runs the conveyor
+	void BallAcquisition() {
+		
+		conveyor->set(stick2->GetY());
+		//increments the counter if a ball enters
+		if ((ball3->GetVoltage() => BALL_SENSOR_THRESHOLD) && (hadBall == false)) {
+			++ballsNumber;
+			hadBall = true;
+		}
+		else {
+			hadBall = false;
+		}
+		//raises the ballNumber to 2 if both sensord are activated ant the number is under 2
+		if(((ball3->GetVoltage() => BALL_SENSOR_THRESHOLD) || (ball1->GetVoltage() => BALL_SENSOR_THRESHOLD)) && (ballsNumber < 2)) {
+			ballsNumber = 2;
+		}
+		//sets the ball count to values determined by data from both sensors
+		if ((ball3->GetVoltage() => BALL_SENSOR_THRESHOLD) && (ball1->GetVoltage() => BALL_SENSOR_THRESHOLD)) {
+			++counter;
+		}
+		if (ballsNumber < 2) {
+			ballsNumber = 2;
+		}
+		if (ballCounter => TRIGGER_ITTERATIONS) {
+			ballsNumber = 3;
+			counter = 0
+		}
+		else {
+			counter = 0;
+		}
+		//This checks if it's too big.
+		if (ballsNumber > 3) {
+	    	ballsNumber = 3;
+		//This checks if it's too small.
+		}
+		else if (ballsNumber < 0) {
+			ballsNumber = 0;
+		}
+		//this sends the driver a message if there are three balls
+		if (ballsNumber = 3) {
+			SendWarning()//TODO: replace with real function to send mesage to dashboard
+		}
+	}
+	
+	ballsNumber--;//TODO: put into the firing function after a ball is launched
+	
 	/*
 	void regulateMotorSpeed( Encoder* motorEncoder, SpeedController* motor, double speed ) {
 		double encoderRate = motorEncoder->GetRate();
