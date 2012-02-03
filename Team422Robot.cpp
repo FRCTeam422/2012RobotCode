@@ -16,11 +16,11 @@ const int LEFT_DRIVE_1_CHANNEL = 2;
 const int RIGHT_DRIVE_0_CHANNEL = 3;
 const int RIGHT_DRIVE_1_CHANNEL = 4;
 
-const int LEFT_SHIFTER_CHANNEL = 7; //edit these soon
+const int LEFT_SHIFTER_CHANNEL = 8; //edit these soon
 //const int RIGHT_SHIFTER_CHANNEL = ; 
 
-const int TOP_LAUNCHER_CHANNEL = 7;
-const int BOTTOM_LAUNCHER_CHANNEL = 8;
+const int TOP_LAUNCHER_CHANNEL = 10;	// TODO: change this back to 7
+const int BOTTOM_LAUNCHER_CHANNEL = 11;	// TODO: change this back to 8
 
 const int CONVEYOR_0_CHANNEL = 6;
 const int CONVEYOR_1_CHANNEL = 9;
@@ -35,10 +35,11 @@ const int TURNING_BUTTON = 2;
 
 //Other Constants
 const int MAX_MOTOR_RPM = 200; //TODO: Get actual value for the maximum RPM
+const double PULSES_PER_REVOLUTION = 250.0; //pulses for revolution on the endoders
 
 const float SHIFT_SERVO_MIN = 0.0;
-const float SHIFT_SERVO_MAX = 1.0;
-const float SHIFT_SERVO_ERROR = 0.1;
+const float SHIFT_SERVO_MAX = 0.75;
+//const float SHIFT_SERVO_ERROR = 0.1; //deprecated
 
 class MainRobot : public IterativeRobot {
 	//TODO: Change Jaguars to Victors
@@ -52,6 +53,9 @@ class MainRobot : public IterativeRobot {
 	Jaguar *bottomLauncher;
 	Victor *conveyor0;
 	Victor *conveyor1;
+	
+	Jaguar *shiftTestingMotor;
+	
 	Encoder *launchEncoderTop;
 	PIDController *shooterControl;
 	//Encoder *launchEncoderBottom;
@@ -71,6 +75,9 @@ public:
 		rightDrive1 = new Victor(DIGITAL_SIDECAR_PORT,RIGHT_DRIVE_1_CHANNEL);
 		leftShifter = new Servo(DIGITAL_SIDECAR_PORT,LEFT_SHIFTER_CHANNEL);
 		//rightShifter = new Servo(DIGITAL_SIDECAR_PORT,LEFT_SHIFTER_CHANNEL);
+		
+		shiftTestingMotor = new Jaguar(DIGITAL_SIDECAR_PORT,7);
+		
 		topLauncher = new Jaguar(DIGITAL_SIDECAR_PORT,TOP_LAUNCHER_CHANNEL);
 		bottomLauncher = new Jaguar(DIGITAL_SIDECAR_PORT,BOTTOM_LAUNCHER_CHANNEL);
 		conveyor0 = new Victor(DIGITAL_SIDECAR_PORT,CONVEYOR_0_CHANNEL);
@@ -84,7 +91,7 @@ public:
 		dashboardLCD = DriverStationLCD::GetInstance();
 		//shooterControl = new PIDController(1.0f,0.000f,0.0f,launchEncoderTop,topLauncher);
 		SetPeriod( 0.0 );
-		launchEncoderTop->SetDistancePerPulse(1.0);
+		launchEncoderTop->SetDistancePerPulse(1.0/PULSES_PER_REVOLUTION);
 		test = 0;
 		switch0 = new DigitalInput(1);
 	}
@@ -94,20 +101,25 @@ public:
 
 	//Update the drive motor speeds on the robot from stick0 and stick1 positions
 	void Drive(void) {
-		float left = stick0-GetY();
-		float right = stick1-GetY();
-		float turning = stick1-GetX();
-		if (stick0-GetRawButton(TURNING_BUTTON)) { //if you hold this button, the robot will only rotate, with stick1x
-			leftDrive0-Set(turning);
-			leftDrive1-Set(turning);
-			rightDrive0-Set(-turning);
-			rightDrive1-Set(-turning);
+		float left = stick0->GetY();
+		float right = stick1->GetY();
+		float turning = stick1->GetX();
+		
+		if (stick0->GetTrigger() || stick1->GetTrigger()) {
+			ShiftGear();
+		}
+		
+		if (stick0->GetRawButton(TURNING_BUTTON)) { //if you hold this button, the robot will only rotate, with stick1x
+			leftDrive0->Set(turning);
+			leftDrive1->Set(turning);
+			rightDrive0->Set(-turning);
+			rightDrive1->Set(-turning);
 		}
 		else {
-			leftDrive0-Set(left);
-			leftDrive1-Set(left);
-			rightDrive0-Set(right);
-			rightDrive1-Set(right);
+			leftDrive0->Set(left);
+			leftDrive1->Set(left);
+			rightDrive0->Set(right);
+			rightDrive1->Set(right);
 		}
 	}
 
@@ -118,12 +130,12 @@ public:
 		rightDrive0->Set(0.0);
 		rightDrive1->Set(0.0);
 		Wait(0.25); //wait for a quarter of a second to let the drive motors stop
-		if (((SHIFT_SERVO_MIN + SHIFT_SERVO_ERROR) > leftShifter->Get() > (SHIFT_SERVO_MIN - SHIFT_SERVO_ERROR)) && ((SHIFT_SERVO_MIN + SHIFT_SERVO_ERROR) > rightShifter->Get() > (SHIFT_SERVO_MIN - SHIFT_SERVO_ERROR))) {
+		if ((leftShifter->Get() == SHIFT_SERVO_MIN)/* && (rightShifter->Get() == SHIFT_SERVO_MIN)*/) {
 			// are the two servos between the error threshold of where they would be if they were in MIN state? if so, set to MAX state.
 			leftShifter->Set(SHIFT_SERVO_MAX);
 			//rightShifter->Set(SHIFT_SERVO_MAX);
 		}
-		else if (((SHIFT_SERVO_MAX + SHIFT_SERVO_ERROR) > leftShifter->Get() > (SHIFT_SERVO_MAX - SHIFT_SERVO_ERROR)) && ((SHIFT_SERVO_MAX + SHIFT_SERVO_ERROR) > rightShifter->Get() > (SHIFT_SERVO_MAX - SHIFT_SERVO_ERROR))) {
+		else if ((leftShifter->Get() == SHIFT_SERVO_MAX)/* && (rightShifter->Get() == SHIFT_SERVO_MAX)*/) {
 			// are the two servos between the error threshold of where they would be if they were in MAX state? if so, set to MIN state.
 			leftShifter->Set(SHIFT_SERVO_MIN);
 			//rightShifter->Set(SHIFT_SERVO_MIN);
@@ -135,20 +147,23 @@ public:
 		double throttle = stick2->GetThrottle();
 		if(stick2->GetRawButton(2)) {
 			if(throttle != launchEncoderTop->GetRate()) {//TODO: Add in bottomLauncher
-				topLauncher->Set(throttle);
+				//topLauncher->Set(throttle);
+				
 			}
 		}
 		else {
 			topLauncher->Set(0.0);
 		}
 	}
-
+	/*
 	void regulateMotorSpeed( Encoder* motorEncoder, SpeedController* motor, double speed ) {
 		double encoderRate = motorEncoder->GetRate();
 		if( encoderRate != speed*MAX_MOTOR_RPM ) {
 			motor->Set(speed);
 		}
 	}
+	*/
+	
 
 	//Required Methods
 
@@ -190,6 +205,13 @@ public:
 		//topLauncher->Set(stick2->GetY());
 		if(stick1->GetRawButton(2)) topLauncher->Set(0.25);
 		else topLauncher->Set(0);
+		
+		shiftTestingMotor->Set(stick2->GetY());
+		
+		if (stick0->GetTrigger() || stick1->GetTrigger()) {
+			ShiftGear();
+		}
+
 		//topLauncher->Set(stick2->GetY());
 		//BottomLauncher->Set(stick2->GetY());
 	}
