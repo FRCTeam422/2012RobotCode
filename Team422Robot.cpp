@@ -20,13 +20,16 @@ const int LEFT_SHIFTER_CHANNEL = 8; //edit these soon
 //const int RIGHT_SHIFTER_CHANNEL = ; 
 
 const int TOP_LAUNCHER_CHANNEL = 10;	// TODO: change this back to 7
-const int BOTTOM_LAUNCHER_CHANNEL = 11;	// TODO: change this back to 8
+const int BOTTOM_LAUNCHER_CHANNEL = 9;	// TODO: change this back to 8
 
 const int CONVEYOR_CHANNEL = 6;
 
 //Analog Channels
 const int BALL0_SENSOR_PORT = 5; //these interfere with the encoder channels TODO: fix that
 const int BALL2_SENSOR_PORT = 7;
+
+const int GYRO_PORT = 4;
+//
 
 //Digital Channels
 const int LAUNCH_ENCODER_TOP_CHANNEL_A = 7;
@@ -37,16 +40,17 @@ const int LAUNCH_ENCODER_BOTTOM_CHANNEL = 8;
 const int TURNING_BUTTON = 2;
 
 //Other Constants
-const int MAX_MOTOR_RPM = 200; //TODO: Get actual value for the maximum RPM
+const double MAX_MOTOR_RPM = 2000; //TODO: Get actual value for the maximum RPM
 const double PULSES_PER_REVOLUTION = 250.0; //pulses for revolution on the endoders
+//const double LAUNCHER_SPEED_INCREMENT = 0.01; // how much 
+
 
 const float BALL_SENSOR_THRESHOLD = 1.2;
-const int TRIGGER_ITERATIONS = ; //TODO: Put the number of times the ball acquisition code will be run befoure a ball passes the sensor here
+const int TRIGGER_ITERATIONS = 0; //TODO: Put the number of times the ball acquisition code will be run before a ball passes the sensor here
 
-
-const float SHIFT_SERVO_MIN = 0.0;
+const float SHIFT_SERVO_MIN = 0.1;
 const float SHIFT_SERVO_MAX = 0.75;
-//const float SHIFT_SERVO_ERROR = 0.1; //deprecated
+const float SHIFT_SERVO_ERROR = 0.1; //deprecated
 
 class MainRobot : public IterativeRobot {
 	//TODO: Change Jaguars to Victors
@@ -73,11 +77,12 @@ class MainRobot : public IterativeRobot {
 	AnalogChannel *ultrasonic;
 	AnalogChannel *ball0;
 	AnalogChannel *ball2;
+	Gyro *gyro;
 	int test;
 	DigitalInput *switch0;
 	//global variables used to keep track of the number of balls
 	int ballsNumber;
-	int Counter;
+	int counter;
 	bool hadBall;
 public:
 	MainRobot(void) {
@@ -105,10 +110,11 @@ public:
 		launchEncoderTop->SetDistancePerPulse(1.0/PULSES_PER_REVOLUTION);
 		ball0 = new AnalogChannel(BALL0_SENSOR_PORT);
 		ball2 = new AnalogChannel(BALL2_SENSOR_PORT);
+		gyro = new Gyro(ANALOG_MODULE_PORT,GYRO_PORT);
 		test = 0;
 		switch0 = new DigitalInput(1);
 		ballsNumber = 0;
-		Counter = 0;
+		counter = 0;
 		hadBall = false;
 	}
 
@@ -141,40 +147,41 @@ public:
 
 	//Sets the gear shifting servos to the values that they currently aren't
 	void ShiftGear() {
-		leftDrive0->Set(0.0);
-		leftDrive1->Set(0.0);
-		rightDrive0->Set(0.0);
-		rightDrive1->Set(0.0);
-		Wait(0.25); //wait for a quarter of a second to let the drive motors stop
-		if ((leftShifter->Get() == SHIFT_SERVO_MIN)/* && (rightShifter->Get() == SHIFT_SERVO_MIN)*/) {
-			// are the two servos between the error threshold of where they would be if they were in MIN state? if so, set to MAX state.
+		//leftDrive0->Set(0.0);
+		//leftDrive1->Set(0.0);
+		//rightDrive0->Set(0.0);
+		//rightDrive1->Set(0.0);
+		Wait(0.1); //wait for a quarter of a second to let the drive motors stop
+		if (((leftShifter->Get() >= SHIFT_SERVO_MIN - SHIFT_SERVO_ERROR) && (leftShifter->Get() <= SHIFT_SERVO_MIN + SHIFT_SERVO_ERROR))/* && (rightShifter->Get() == SHIFT_SERVO_MIN)*/) {
 			leftShifter->Set(SHIFT_SERVO_MAX);
 			//rightShifter->Set(SHIFT_SERVO_MAX);
 		}
-		else if ((leftShifter->Get() == SHIFT_SERVO_MAX)/* && (rightShifter->Get() == SHIFT_SERVO_MAX)*/) {
-			// are the two servos between the error threshold of where they would be if they were in MAX state? if so, set to MIN state.
+		else if (((leftShifter->Get() >= SHIFT_SERVO_MAX - SHIFT_SERVO_ERROR) && (leftShifter->Get() <= SHIFT_SERVO_MAX + SHIFT_SERVO_ERROR)))/* && (rightShifter->Get() == SHIFT_SERVO_MIN)*//* && (rightShifter->Get() == SHIFT_SERVO_MAX)*/ {
 			leftShifter->Set(SHIFT_SERVO_MIN);
 			//rightShifter->Set(SHIFT_SERVO_MIN);
 		}
 	}
-
+	
 	//Update speed of the launcher from the throttle on stick2
 	void SetLauncherSpeed() {
-		double throttle = stick2->GetThrottle();
+		/*double throttle = stick2->GetThrottle();
 		if(stick2->GetRawButton(2)) {
-			if(throttle != launchEncoderTop->GetRate()) {//TODO: Add in bottomLauncher
-				//topLauncher->Set(throttle);
-				
+			// if the speed it's supposed to be running is less than  current rate from encoder, increment the speed by LAUNCHER_SPEED_INCREMENT
+			if(throttle < (launchEncoderTop->GetRate() / MAX_MOTOR_RPM)) { // both numbers should range from 0 to 1 //TODO: Add in bottomLauncher
+				topLauncher->Set(topLauncher);
 			}
+			else if(throttle > (launchEncoderTop->GetRate() / MAX_MOTOR_RPM)) { // both numbers should range from 0 to 1 //TODO: Add in bottomLauncher
 		}
 		else {
 			topLauncher->Set(0.0);
 		}
+		*/
+		topLauncher->Set(stick2->GetThrottle() / MAX_MOTOR_RPM);
+		
 	}
 	//This counts balls, and runs the conveyor
 	void BallAcquisition() {
-		
-		conveyor->set(stick2->GetY());
+		conveyor->Set(stick2->GetY());
 		//increments the counter if a ball enters
 		if ((ball2->GetVoltage() >= BALL_SENSOR_THRESHOLD) && (hadBall == false)) {
 			++ballsNumber;
@@ -183,20 +190,20 @@ public:
 		else {
 			hadBall = false;
 		}
-		//raises the ballNumber to 2 if both sensord are activated ant the number is under 2
+		//raises the ballNumber to 2 if both sensors are activated ant the number is under 2
 		if(((ball2->GetVoltage() >= BALL_SENSOR_THRESHOLD) || (ball0->GetVoltage() >= BALL_SENSOR_THRESHOLD)) && (ballsNumber < 2)) {
 			ballsNumber = 2;
 		}
 		//sets the ball count to values determined by data from both sensors
-		if ((ball2->GetVoltage() >= BALL_SENSOR_THRESHOLD) && (ball0->GetVoltage() >= BALL_SENSOR_THRESHOLD)) {
+		else if ((ball2->GetVoltage() >= BALL_SENSOR_THRESHOLD) && (ball0->GetVoltage() >= BALL_SENSOR_THRESHOLD)) {
 			++counter;
 		}
 		if (ballsNumber < 2) {
 			ballsNumber = 2;
 		}
-		if (ballCounter >= TRIGGER_ITTERATIONS) {
+		if (counter >= TRIGGER_ITERATIONS) {
 			ballsNumber = 3;
-			counter = 0
+			counter = 0;
 		}
 		else {
 			counter = 0;
@@ -211,7 +218,7 @@ public:
 		}
 		//this sends the driver a message if there are three balls
 		if (ballsNumber == 3) {
-			SendWarning()//TODO: replace with real function to send mesage to dashboard
+			dashboardLCD->Printf(DriverStationLCD::kUser_Line5,1, "WARNING: In posession three balls.");//SendWarning(); //TODO: replace with real function to send mesage to dashboard
 		}
 	}
 	
@@ -226,6 +233,9 @@ public:
 	}
 	*/
 	
+	void Launch() {
+			
+	}
 
 	//Required Methods
 
@@ -244,6 +254,9 @@ public:
 	void TeleopInit(void) {
 		launchEncoderTop->Start();
 		launchEncoderTop->Reset();
+		leftShifter->Set(SHIFT_SERVO_MIN);
+		//rightShifter->Set(SHIFT_SERVO_MAX);
+
 		//shooterControl->Enable();
 
 	}
@@ -254,8 +267,11 @@ public:
 
 		//dashboardLCD->Printf( DriverStationLCD::kUser_Line1, 1, "Encoder Rate: %g",launchEncoderTop->Get() );
 		dashboardLCD->Printf(DriverStationLCD::kUser_Line1, 1, "Encoder Count: %d",launchEncoderTop->Get());
-		dashboardLCD->Printf(DriverStationLCD::kUser_Line2, 1, "Switch: %d",switch0->Get());
-		dashboardLCD->Printf(DriverStationLCD::kUser_Line3,1, "Ultrasonic: %d",ultrasonic->GetValue());
+		dashboardLCD->Printf(DriverStationLCD::kUser_Line2, 1, "Encoder Rate: %g",launchEncoderTop->GetRate());
+		dashboardLCD->Printf(DriverStationLCD::kUser_Line3, 1, "Ultrasonic: %d",ultrasonic->GetValue());
+		dashboardLCD->Printf(DriverStationLCD::kUser_Line4, 1, "Gearshift: %g",leftShifter->Get());
+		dashboardLCD->Printf(DriverStationLCD::kUser_Line5, 1, "GyroAngle: %g",gyro->GetAngle());
+
 		dashboardLCD->UpdateLCD();
 		//topLauncher->Set(0.25);
 	}
