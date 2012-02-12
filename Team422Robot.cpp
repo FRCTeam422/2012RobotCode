@@ -24,9 +24,9 @@ const int	LEFT_DRIVE_CHANNEL = 1,	///< Digital Sidecar output channel for the le
 
 
 //Digital Channels
-const int	LAUNCH_ENCODER_TOP_CHANNEL_A = 7, ///< Digital Sidecar input channel for the top launch motor encoder channel A
-			LAUNCH_ENCODER_TOP_CHANNEL_B = 5, ///< Digital Sidecar input channel for the top launch motor encoder channel B
-			LAUNCH_ENCODER_BOTTOM_CHANNEL_A = 8, ///< Digital Sidecar input channel for the bottom launch motor encoder channel A
+const int	LAUNCH_ENCODER_TOP_CHANNEL_A = 5, ///< Digital Sidecar input channel for the top launch motor encoder channel A
+			LAUNCH_ENCODER_TOP_CHANNEL_B = 7, ///< Digital Sidecar input channel for the top launch motor encoder channel B
+			LAUNCH_ENCODER_BOTTOM_CHANNEL_A = 1, ///< Digital Sidecar input channel for the bottom launch motor encoder channel A
 			LAUNCH_ENCODER_BOTTOM_CHANNEL_B = 3; ///< Digital Sidecar input channel for the bottom launch motor encoder channel B
 
 //Analog Channels
@@ -44,12 +44,14 @@ const int	TURNING_BUTTON = 2; ///< Joystick button to activate the bot's turning
 const float	SHIFT_SERVO_MIN = 0.1, ///< The gear-shifting servo setting for high gear
 			SHIFT_SERVO_MAX = 0.75; ///< The gear-shifting servo setting for low gear
 
-const double MAX_MOTOR_RPM = 2000.0, ///< @todo Get actual value for the maximum RPM
+const double MAX_MOTOR_RPM = 2000.0, ///< The maximum RPM of the CIMs
 			PULSES_PER_REVOLUTION = 250.0, ///< Pulses per motor revolution emitted by the encoders
 			BALL_SENSOR_THRESHOLD = 1.2, ///< The threshold that the proximity sensors must be above to indicate the presence of the ball
 			AIM_TURNING_SPEED = 0.25, ///< The speed to turn at when aiming the shooter
 			PI = 3.14159, ///< Pi to 6 significant figures
-			MIN_TOP_LAUNCHER_RPM = 500; ///< The minimum rpm to run the top mmotor at to launch
+			MIN_TOP_LAUNCHER_RPM = 500, ///< The minimum rpm to run the top mmotor at to launch
+			LEFT_DRIVE_SCALE = -1.0, ///< The scaling factor for the left drive motors
+			RIGHT_DRIVE_SCALE = 1.0; ///< The scaling factor for the right drive motors
 
 //PID Constants
 const float PID_P = 0.01, ///< Proportional value for the launch motor PID controllers
@@ -76,6 +78,7 @@ const float TARGET_WIDTH = 24.0, ///< The width of the retro-reflective target
  * @author Nyle Rodgers
  * @author Andy Zhu
  * @author Robert Jones
+ * @author Harrison Grinnan
  */
 class MainRobot : public IterativeRobot {
 	Victor 	*leftDrive, ///< Victors for the left drive motors
@@ -87,8 +90,8 @@ class MainRobot : public IterativeRobot {
 	Jaguar 	*topLauncher, ///< Jaguar for the top launch motor
 			*bottomLauncher; ///< Jaguar for the bottom launch motor
 
-	Encoder *launchEncoderTop; ///< Encoder on the top launch motor
-			//*launchEncoderBottom; ///< Encoder on the bottom launch motor
+	Encoder *launchEncoderTop, ///< Encoder on the top launch motor
+			*launchEncoderBottom; ///< Encoder on the bottom launch motor
 
 	PIDController	*shooterTopControl, ///< PID controller for the top launch motor
 					*shooterBottomControl; ///< PID controller for the bottom launch motor
@@ -127,18 +130,21 @@ public:
 	 * @author Andy Zhu
 	 */
 	MainRobot(void) {
-		leftDrive		= new Victor(DIGITAL_SIDECAR_PORT,LEFT_DRIVE_CHANNEL);
-		rightDrive		= new Victor(DIGITAL_SIDECAR_PORT,RIGHT_DRIVE_CHANNEL);
-		conveyor		= new Victor(DIGITAL_SIDECAR_PORT,CONVEYOR_CHANNEL);
+		leftDrive		= new Victor(DIGITAL_SIDECAR_PORT, LEFT_DRIVE_CHANNEL);
+		rightDrive		= new Victor(DIGITAL_SIDECAR_PORT, RIGHT_DRIVE_CHANNEL);
+		conveyor		= new Victor(DIGITAL_SIDECAR_PORT, CONVEYOR_CHANNEL);
 
 		shifter			= new Servo(DIGITAL_SIDECAR_PORT, SHIFTER_CHANNEL);
 
-		topLauncher		= new Jaguar(DIGITAL_SIDECAR_PORT,TOP_LAUNCHER_CHANNEL);
-		bottomLauncher	= new Jaguar(DIGITAL_SIDECAR_PORT,BOTTOM_LAUNCHER_CHANNEL);
+		topLauncher		= new Jaguar(DIGITAL_SIDECAR_PORT, TOP_LAUNCHER_CHANNEL);
+		bottomLauncher	= new Jaguar(DIGITAL_SIDECAR_PORT, BOTTOM_LAUNCHER_CHANNEL);
 
 		launchEncoderTop 	= new Encoder(LAUNCH_ENCODER_TOP_CHANNEL_A, LAUNCH_ENCODER_TOP_CHANNEL_B, false, Encoder::k1X);
-		//launchEncoderBottom	= new Encoder(LAUNCH_ENCODER_BOTTOM_CHANNEL_A, LAUNCH_ENCODER_BOTTOM_CHANNEL_B, false, Encoder::k1X);
+		launchEncoderBottom	= new Encoder(LAUNCH_ENCODER_BOTTOM_CHANNEL_A, LAUNCH_ENCODER_BOTTOM_CHANNEL_B, false, Encoder::k1X);
+
+		//Set the encoders to return values in RPM
 		launchEncoderTop->SetDistancePerPulse(1.0/PULSES_PER_REVOLUTION);
+		launchEncoderBottom->SetDistancePerPulse(1.0/PULSES_PER_REVOLUTION);
 
 		stick0			= new Joystick(JOYSTICK_0_PORT);
 		stick1			= new Joystick(JOYSTICK_1_PORT);
@@ -154,9 +160,14 @@ public:
 
 		launchEncoderTop->SetPIDSourceParameter(Encoder::kRate);
 
-		shooterTopControl	= new PIDController(PID_P, PID_I, PID_D ,launchEncoderTop,topLauncher);
-		shooterTopControl->SetInputRange(-10.0,10.0);
-		shooterTopControl->SetOutputRange(-1.0,1.0);
+		//Set up the PID controllers to accept values in RPM and output to the Jaguars scaled between -1.0 and 1.0
+		shooterTopControl = new PIDController(PID_P, PID_I, PID_D, launchEncoderTop, topLauncher);
+		shooterTopControl->SetInputRange( -MAX_MOTOR_RPM, MAX_MOTOR_RPM );
+		shooterTopControl->SetOutputRange( -1.0,1.0 );
+
+		shooterBottomControl = new PIDController(PID_P, PID_I, PID_D, launchEncoderBottom, bottomLauncher);
+		shooterBottomControl->SetInputRange( -MAX_MOTOR_RPM, MAX_MOTOR_RPM );
+		shooterBottomControl->SetOutputRange( -1.0,1.0 );
 
 		ballCount = 0;
 		ballSensor0HadBall = false;
@@ -180,10 +191,11 @@ public:
 	 * @param relativeHoopHeight The height of the target hoop relative to the height of the shooter
 	 * @return The total RPM for both shooter motors
 	 * @author Will Kunkel
+	 * @author Harrison Grinnan
 	 */
 	float GetTotalShooterRPM( double distance, double relativeHoopHeight ) {
 		float totalBottom = (2.8763 * distance) - (2 * relativeHoopHeight);
-		if ( totalBottom < 0 ) {
+		if ( totalBottom < 0 ) { //Make sure that we aren't trying to get the square root of a negative number
 			throw 1;
 		}
 		return ((2594.59 * distance)/sqrt(totalBottom));
@@ -203,30 +215,31 @@ public:
 	 * @author Will Kunkel
 	 */
 	void SetShooterRPM( double distance, double relativeHoopHeight ) {
-		float totalRPM = 0.0;
-		try {
+		float 	totalRPM = 0.0,
+				topShooterRPM = 0.0,
+				bottomShooterRPM = 0.0;
+		try { //Try to get the total RPM necessary for the given distance and hoop
 			totalRPM = GetTotalShooterRPM( distance, relativeHoopHeight );
 		}
-		catch( int e ) {
+		catch( int e ) { //If getting the total RPM throws an error, the shot is impossible
 			dashboardLCD->Printf(DriverStationLCD::kUser_Line6, 1, "Shot is impossible");
 			return;
 		}
-		float 	topShooterRPM = 0.0,
-				bottomShooterRPM = 0.0;
 
-		if ( totalRPM > MIN_TOP_LAUNCHER_RPM ) {
+		if ( totalRPM > MIN_TOP_LAUNCHER_RPM ) { //Check that the total RPM is greater than the minimum RPM for the top motor
 			topShooterRPM = MIN_TOP_LAUNCHER_RPM;
-			totalRPM -= MIN_TOP_LAUNCHER_RPM;
-			if( totalRPM > MAX_MOTOR_RPM ) {
+			totalRPM -= topShooterRPM;
+			if( totalRPM > MAX_MOTOR_RPM ) { 	//If total RPM still has more than the maximum RPM of the bottom motor, increase
+												//the bottom motor to the maximum and add the overflow to the top motor
 				bottomShooterRPM = MAX_MOTOR_RPM;
 				totalRPM -= MAX_MOTOR_RPM;
 				topShooterRPM += totalRPM;
 			}
-			else {
+			else { //If the total RPM is less than the maximum RPM for the bottom motor, set the bottom motor to the remaining amount
 				bottomShooterRPM = totalRPM;
 			}
 		}
-		else {
+		else { //If the total RPM is less than the minimum top RPM, the shot is impossible
 			dashboardLCD->Printf(DriverStationLCD::kUser_Line6, 1, "Shot is impossible");
 			return;
 		}
@@ -258,13 +271,13 @@ public:
 			LowGear();
 		}
 
-		if (stick0->GetRawButton(TURNING_BUTTON)) { //if you hold this button, the robot will only rotate, with stick1x
-			leftDrive->Set(turning);
-			rightDrive->Set(-turning);
+		if (stick0->GetRawButton(TURNING_BUTTON)) { //If you hold this button, the robot will only rotate, with stick1 x-values
+			leftDrive->Set(LEFT_DRIVE_SCALE * turning);
+			rightDrive->Set(RIGHT_DRIVE_SCALE * -turning);
 		}
-		else {
-			leftDrive->Set(left);
-			rightDrive->Set(right);
+		else { //Control the left and right drive motors with the left and right joystick y-values
+			leftDrive->Set(LEFT_DRIVE_SCALE * left);
+			rightDrive->Set(RIGHT_DRIVE_SCALE * right);
 		}
 	}
 
@@ -303,19 +316,19 @@ public:
 	 */
 	void RunConveyor(void) {
 		conveyor->Set(stick2->GetY());
-		if((ballSensor0->GetVoltage() >= BALL_SENSOR_THRESHOLD)
-				&& !ballSensor0HadBall
+		if((ballSensor0->GetVoltage() >= BALL_SENSOR_THRESHOLD) //Increment the counter if the proximity sensor senses a ball that was not
+				&& !ballSensor0HadBall							//there before and the conveyor is moving forward.
 				&& (conveyor->Get() > 0)) {
 			ballCount++;
 			ballSensor0HadBall = true;
 		}
-		else if((ballSensor0->GetVoltage() >= BALL_SENSOR_THRESHOLD)
-				&& !ballSensor0HadBall
+		else if((ballSensor0->GetVoltage() >= BALL_SENSOR_THRESHOLD)	//Decrement the counter if the proximity sensor senses a ball that was
+				&& !ballSensor0HadBall									//not there before and the conveyor is in reverse
 				&& (conveyor->Get() < 0)) {
 			ballCount--;
 			ballSensor0HadBall = true;
 		}
-		else {
+		else {	//If the ball sensor senses no ball, set that it did not have a ball
 			ballSensor0HadBall = false;
 		}
 	}
@@ -350,7 +363,7 @@ public:
 	double AngleChange(double theta, double distance) {
 		double sin_theta = sin(theta);
 		double cos_theta = cos(theta);
-		return atan(
+		return atan(	//This formula was determined to get the angle change necessary
 				((TARGET_WIDTH/2)
 						+ distance*sin_theta
 						+ sqrt((-4*distance*cos_theta)
@@ -373,10 +386,10 @@ public:
 		leftDrive->Set(0.0);
 		rightDrive->Set(0.0);
 		LowGear();
-		Wait(.25);
+		Wait(.25); //Wait for the motor to change gears
 		gyro->Reset();
-		while (fabs(gyro->GetAngle() * PI / 180.0) < angle) {
-			/*if (targetisonleftsideofvision) { ///@todo Change targetisonleftsideofvision to a usable value
+		while (fabs(gyro->GetAngle() * PI / 180.0) < angle) { //Until the bot is facing the correct direction, turn at a set speed in that direction
+			if (/*targetisonleftsideofvision*/ true ) { ///@todo Change targetisonleftsideofvision to a usable value
 				leftDrive->Set(-AIM_TURNING_SPEED);
 				rightDrive->Set(AIM_TURNING_SPEED);
 			}
@@ -384,8 +397,10 @@ public:
 				leftDrive->Set(AIM_TURNING_SPEED);
 				rightDrive->Set(-AIM_TURNING_SPEED);
 			}
-			*/
 		}
+		leftDrive->Set(0.0);
+		rightDrive->Set(0.0);
+		HighGear();
 		//gyro->Reset();
 	}
 
@@ -438,6 +453,8 @@ public:
 		dashboardLCD->Printf(DriverStationLCD::kUser_Line3, 1, "Ultrasonic: %d",ultrasonic->GetValue());
 		dashboardLCD->Printf(DriverStationLCD::kUser_Line4, 1, "Gearshift: %g",shifter->Get());
 		dashboardLCD->Printf(DriverStationLCD::kUser_Line5, 1, "GyroAngle: %g",gyro->GetAngle());
+		dashboardLCD->Printf(DriverStationLCD::kUser_Line6, 1, "D%g R%g",	((stick2->GetThrottle()+1) / 2.0) * 90.0,
+																			((stick2->GetThrottle()+1) / 2.0) * 90.0 * PI / 180.0);
 		dashboardLCD->UpdateLCD();
 		//PIDSetLauncherSpeed();
 		//topLauncher->Set(stick2->GetY());
@@ -456,9 +473,6 @@ public:
 	 */
 	void TeleopContinuous(void) {
 		//Drive();
-		//shooterControl->SetSetpoint(stick2->GetY());
-		//topLauncher->Set(stick2->GetY());
-
 		if (stick1->GetTrigger()) {
 			HighGear();
 		}
@@ -469,8 +483,9 @@ public:
 		if (stick2->GetRawButton(11)) {
 			gyro->Reset();
 		}
-		//topLauncher->Set(stick2->GetY());
-		//BottomLauncher->Set(stick2->GetY());
+		if (stick2->GetRawButton(10)) {
+			AimRobot(((stick2->GetThrottle()+1) / 2.0) * 90.0 * PI / 180.0);
+		}
 	}
 };
 
